@@ -5,12 +5,20 @@
   // ==================================================
 
   const GLOBAL = {
-    width: 800,
+    width: 1700,
     height: 500,
+
+    panelWidth: 800,
+    panelGap: 100,
+
     maxTicks: 250,
     maxSpeed: 150,
+    maxPosition: 1500,
+    minPosition: 0.01,
 
     initialSpeed: 0,
+    initialPosition: 0,
+
     ticksPerSecond: 25,
     speedMod: 0.15,
 
@@ -20,7 +28,17 @@
 
   // ==================================================
   // CONFIGURATIONS
-  // Each configuration defines its own color.
+  //
+  // Each configuration owns its color.
+  //
+  // Impulse properties:
+  //   magnitude: added to speed before drag
+  //   interval:  repeat interval in ticks
+  //   offset:    first update tick; defaults to 0
+  //
+  // Example:
+  // { magnitude: 0.05, interval: 25, offset: 5 }
+  // applies at update ticks 5, 30, 55, 80...
   // ==================================================
 
   const CONFIGURATIONS = [
@@ -47,12 +65,14 @@
       acceleration: 0.2,
       impulses: [
         { magnitude: 0.05, interval: 25 },
-        { magnitude: 0.10, interval: 50 }
+        { magnitude: 0.10, interval: 50, offset: 10 }
       ]
     }
   ];
 
   const NS = "http://www.w3.org/2000/svg";
+
+  const POSITION_X = GLOBAL.panelWidth + GLOBAL.panelGap;
 
   // ==================================================
   // VALIDATION
@@ -63,9 +83,15 @@
     GLOBAL.height <= 0 ||
     GLOBAL.maxTicks <= 0 ||
     GLOBAL.maxSpeed <= 0 ||
+    GLOBAL.maxPosition <= 0 ||
+    GLOBAL.minPosition <= 0 ||
     GLOBAL.ticksPerSecond <= 0
   ) {
     throw new Error("Graph dimensions and scale values must be positive.");
+  }
+
+  if (GLOBAL.maxPosition <= GLOBAL.minPosition) {
+    throw new Error("maxPosition must exceed minPosition.");
   }
 
   if (CONFIGURATIONS.length > 20) {
@@ -76,18 +102,14 @@
 
   CONFIGURATIONS.forEach(config => {
     if (
+      !config.name ||
+      !config.color ||
+      !Number.isFinite(config.drag) ||
       config.drag < 0 ||
       config.drag > 1 ||
       !Number.isFinite(config.acceleration)
     ) {
-      throw new Error(`Invalid physics parameters in ${config.name}`);
-    }
-
-    if (
-      typeof config.color !== "string" ||
-      !config.color.trim()
-    ) {
-      throw new Error(`Missing color in ${config.name}`);
+      throw new Error(`Invalid configuration: ${config.name}`);
     }
 
     if (!Array.isArray(config.impulses)) {
@@ -95,11 +117,16 @@
     }
 
     config.impulses.forEach(impulse => {
+      const offset = impulse.offset ?? 0;
+
       if (
-        impulse.interval <= 0 ||
-        impulse.magnitude < 0 ||
         !Number.isFinite(impulse.interval) ||
-        !Number.isFinite(impulse.magnitude)
+        !Number.isInteger(impulse.interval) ||
+        impulse.interval <= 0 ||
+        !Number.isFinite(impulse.magnitude) ||
+        impulse.magnitude < 0 ||
+        !Number.isInteger(offset) ||
+        offset < 0
       ) {
         throw new Error(`Invalid impulse in ${config.name}`);
       }
@@ -131,12 +158,38 @@
   // GRAPH COORDINATES
   // ==================================================
 
-  const x = tick =>
-    (tick / GLOBAL.maxTicks) * GLOBAL.width;
+  // Velocity plot: linear x and y.
 
-  const y = speed =>
+  const velocityX = tick =>
+    (tick / GLOBAL.maxTicks) * GLOBAL.panelWidth;
+
+  const velocityY = speed =>
     GLOBAL.height -
     (speed / GLOBAL.maxSpeed) * GLOBAL.height;
+
+  // Position plot: logarithmic x and y.
+  //
+  // x starts at tick 1 because log(0) is undefined.
+  // y starts at minPosition because log(0) is undefined.
+
+  const positionX = tick =>
+    POSITION_X +
+    (
+      Math.log(tick) /
+      Math.log(GLOBAL.maxTicks)
+    ) * GLOBAL.panelWidth;
+
+  const positionY = position =>
+    GLOBAL.height -
+    (
+      (
+        Math.log(position) - Math.log(GLOBAL.minPosition)
+      ) /
+      (
+        Math.log(GLOBAL.maxPosition) -
+        Math.log(GLOBAL.minPosition)
+      )
+    ) * GLOBAL.height;
 
   // ==================================================
   // SVG ROOT
@@ -152,6 +205,8 @@
   svg.style.display = "block";
   svg.style.border = "1px solid #888";
   svg.style.background = "#fff";
+  svg.style.maxWidth = "100%";
+  svg.style.height = "auto";
 
   // ==================================================
   // CSS STATE SWITCHING
@@ -161,8 +216,7 @@
   const stateCount = 1 << configCount;
 
   function stateId(mask) {
-    return "s" +
-      mask.toString(2).padStart(configCount, "0");
+    return "s" + mask.toString(2).padStart(configCount, "0");
   }
 
   const style = createSvgElement("style");
@@ -172,7 +226,7 @@
       display: none;
     }
 
-    /* Default state: every configuration visible */
+    /* Default: all configurations visible */
     svg:not(:has(:target)) .${stateId(stateCount - 1)} {
       display: inline;
     }
@@ -190,27 +244,27 @@
   svg.appendChild(style);
 
   // ==================================================
-  // BACKGROUND GRAPH
-  // This group is never affected by state switching.
+  // BACKGROUND: VELOCITY PLOT
   // ==================================================
 
   const backgroundGroup = createSvgElement("g", {
     id: "background-graph"
   });
 
-  // Horizontal grid lines and speed labels.
+  // Horizontal velocity grid lines.
+
   for (
     let speed = 0;
     speed <= GLOBAL.maxSpeed;
     speed += GLOBAL.speedGridStep
   ) {
-    const yy = y(speed);
+    const yy = velocityY(speed);
 
     backgroundGroup.appendChild(
       createSvgElement("line", {
         x1: 0,
         y1: yy,
-        x2: GLOBAL.width,
+        x2: GLOBAL.panelWidth,
         y2: yy,
         stroke: "#ddd",
         "stroke-width": 1
@@ -225,13 +279,14 @@
     });
   }
 
-  // Vertical grid lines and tick labels.
+  // Vertical velocity grid lines.
+
   for (
     let tick = 0;
     tick <= GLOBAL.maxTicks;
     tick += GLOBAL.tickGridStep
   ) {
-    const xx = x(tick);
+    const xx = velocityX(tick);
 
     backgroundGroup.appendChild(
       createSvgElement("line", {
@@ -253,7 +308,8 @@
     });
   }
 
-  // Axes.
+  // Velocity axes.
+
   backgroundGroup.appendChild(
     createSvgElement("line", {
       x1: 0,
@@ -269,6 +325,146 @@
     createSvgElement("line", {
       x1: 0,
       y1: GLOBAL.height,
+      x2: GLOBAL.panelWidth,
+      y2: GLOBAL.height,
+      stroke: "#222",
+      "stroke-width": 2
+    })
+  );
+
+  addSvgText(backgroundGroup, "Velocity (blocks/second)", {
+    x: 15,
+    y: 15,
+    fill: "#222",
+    "font-size": 13
+  });
+
+  addSvgText(backgroundGroup, "Ticks", {
+    x: GLOBAL.panelWidth / 2,
+    y: GLOBAL.height - 20,
+    fill: "#222",
+    "font-size": 13,
+    "text-anchor": "middle"
+  });
+
+  // ==================================================
+  // BACKGROUND: LOG-LOG POSITION PLOT
+  // ==================================================
+
+  const positionBackground = createSvgElement("g", {
+    id: "position-background"
+  });
+
+  // Position y-axis grid lines.
+  // Logarithmic values at powers of ten.
+
+  const positionGridValues = [
+    0.01, 0.1, 1, 10, 100, 1000
+  ];
+
+  positionGridValues.forEach(value => {
+    if (
+      value < GLOBAL.minPosition ||
+      value > GLOBAL.maxPosition
+    ) return;
+
+    const yy = positionY(value);
+
+    positionBackground.appendChild(
+      createSvgElement("line", {
+        x1: POSITION_X,
+        y1: yy,
+        x2: GLOBAL.width,
+        y2: yy,
+        stroke: "#ddd",
+        "stroke-width": 1
+      })
+    );
+
+    addSvgText(positionBackground, value, {
+      x: POSITION_X + 5,
+      y: yy - 4,
+      fill: "#555",
+      "font-size": 11
+    });
+  });
+
+  // Add the upper limit as a labeled grid line if it
+  // is not already a power of ten.
+
+  if (
+    !positionGridValues.includes(GLOBAL.maxPosition)
+  ) {
+    const yy = positionY(GLOBAL.maxPosition);
+
+    positionBackground.appendChild(
+      createSvgElement("line", {
+        x1: POSITION_X,
+        y1: yy,
+        x2: GLOBAL.width,
+        y2: yy,
+        stroke: "#aaa",
+        "stroke-width": 1
+      })
+    );
+
+    addSvgText(positionBackground, GLOBAL.maxPosition, {
+      x: POSITION_X + 5,
+      y: yy + 12,
+      fill: "#555",
+      "font-size": 11
+    });
+  }
+
+  // Logarithmic x-axis grid lines.
+  // Include useful intermediate ticks.
+
+  const positionTickValues = [
+    1, 2, 5, 10, 20, 50, 100, 200, 250
+  ];
+
+  positionTickValues.forEach(tick => {
+    if (tick > GLOBAL.maxTicks) return;
+
+    const xx = positionX(tick);
+
+    positionBackground.appendChild(
+      createSvgElement("line", {
+        x1: xx,
+        y1: 0,
+        x2: xx,
+        y2: GLOBAL.height,
+        stroke: "#ddd",
+        "stroke-width": 1
+      })
+    );
+
+    addSvgText(positionBackground, tick, {
+      x: xx,
+      y: GLOBAL.height - 5,
+      fill: "#555",
+      "font-size": 11,
+      "text-anchor": "middle"
+    });
+  });
+
+  // Position axes.
+
+  positionBackground.appendChild(
+    createSvgElement("line", {
+      x1: POSITION_X,
+      y1: 0,
+      x2: POSITION_X,
+      y2: GLOBAL.height,
+      stroke: "#222",
+      "stroke-width": 2
+    })
+  );
+
+  positionBackground.appendChild(
+    createSvgElement("line", {
+      x1: POSITION_X,
+      y1: GLOBAL.height,
       x2: GLOBAL.width,
       y2: GLOBAL.height,
       stroke: "#222",
@@ -276,25 +472,39 @@
     })
   );
 
-  addSvgText(backgroundGroup, "Ticks", {
-    x: GLOBAL.width / 2,
+  addSvgText(positionBackground, "Position (blocks)", {
+    x: POSITION_X + 15,
+    y: 15,
+    fill: "#222",
+    "font-size": 13
+  });
+
+  addSvgText(positionBackground, "Ticks (log scale)", {
+    x: POSITION_X + GLOBAL.panelWidth / 2,
     y: GLOBAL.height - 20,
     fill: "#222",
     "font-size": 13,
     "text-anchor": "middle"
   });
 
-  addSvgText(backgroundGroup, "Speed (blocks/second)", {
-    x: 15,
-    y: 15,
-    fill: "#222",
-    "font-size": 13
-  });
-
+  backgroundGroup.appendChild(positionBackground);
   svg.appendChild(backgroundGroup);
 
   // ==================================================
   // GENERATE CONFIGURATION DATA
+  //
+  // speed is stored in blocks/tick internally.
+  // Displayed velocity is blocks/second.
+  //
+  // position is accumulated in blocks.
+  //
+  // At update tick t:
+  //   1. Find impulses scheduled for t.
+  //   2. Add impulses to speed.
+  //   3. Apply drag.
+  //   4. Add acceleration.
+  //   5. Store speed at tick t+1.
+  //   6. Advance position by the new speed.
   // ==================================================
 
   const allData = CONFIGURATIONS.map(config => {
@@ -302,33 +512,50 @@
       config.acceleration * GLOBAL.speedMod;
 
     const data = [];
+
     let speed = GLOBAL.initialSpeed;
+    let position = GLOBAL.initialPosition;
 
-    for (let tick = 0; tick <= GLOBAL.maxTicks; tick++) {
-      data.push({
-        tick,
-        speed: speed * GLOBAL.ticksPerSecond
-      });
+    // Initial state: tick 0.
+    data.push({
+      tick: 0,
+      speed: speed * GLOBAL.ticksPerSecond,
+      position
+    });
 
-      if (tick === GLOBAL.maxTicks) break;
-
-      // Impulses occur on updates producing ticks:
-      // 1, 1 + interval, 1 + 2*interval, ...
-      const nextTick = tick + 1;
-
-      let impulse = 0;
+    for (
+      let updateTick = 0;
+      updateTick < GLOBAL.maxTicks;
+      updateTick++
+    ) {
+      let impulseTotal = 0;
 
       config.impulses.forEach(source => {
-        if ((nextTick - 1) % source.interval === 0) {
-          impulse += source.magnitude;
+        const offset = source.offset ?? 0;
+
+        if (
+          updateTick >= offset &&
+          (updateTick - offset) % source.interval === 0
+        ) {
+          impulseTotal += source.magnitude;
         }
       });
 
-      // Impulse is added before drag.
-      // Acceleration is added after drag.
+      // Impulse before drag; acceleration after drag.
       speed =
-        (speed + impulse) * config.drag +
+        (speed + impulseTotal) * config.drag +
         effectiveAcceleration;
+
+      // Advance position by the new speed.
+      position += speed;
+
+      const nextTick = updateTick + 1;
+
+      data.push({
+        tick: nextTick,
+        speed: speed * GLOBAL.ticksPerSecond,
+        position
+      });
     }
 
     return data;
@@ -336,6 +563,9 @@
 
   // ==================================================
   // CREATE ONE GROUP PER CONFIGURATION
+  //
+  // Each group contains BOTH plots.
+  // Hiding a configuration hides both curves.
   // ==================================================
 
   const configurationGroups = CONFIGURATIONS.map(
@@ -347,34 +577,97 @@
 
       const data = allData[index];
 
-      // Line path.
-      const pathData = data
+      // ----------------------------------------------
+      // VELOCITY CURVE
+      // ----------------------------------------------
+
+      const velocityGroup = createSvgElement("g", {
+        class: "velocity-series"
+      });
+
+      const velocityPath = data
         .map((point, pointIndex) => {
           const command = pointIndex === 0 ? "M" : "L";
-          return `${command} ${x(point.tick)} ${y(point.speed)}`;
+
+          return (
+            `${command} ${velocityX(point.tick)} ` +
+            `${velocityY(point.speed)}`
+          );
         })
         .join(" ");
 
-      group.appendChild(
+      velocityGroup.appendChild(
         createSvgElement("path", {
-          d: pathData,
+          d: velocityPath,
           fill: "none",
           stroke: config.color,
           "stroke-width": 2
         })
       );
 
-      // Data point circles.
       data.forEach(point => {
-        group.appendChild(
+        velocityGroup.appendChild(
           createSvgElement("circle", {
-            cx: x(point.tick),
-            cy: y(point.speed),
+            cx: velocityX(point.tick),
+            cy: velocityY(point.speed),
             r: 2,
             fill: config.color
           })
         );
       });
+
+      group.appendChild(velocityGroup);
+
+      // ----------------------------------------------
+      // POSITION CURVE
+      // ----------------------------------------------
+
+      const positionGroup = createSvgElement("g", {
+        class: "position-series"
+      });
+
+      // Tick 0 and non-positive positions cannot be
+      // represented on logarithmic axes.
+
+      const positivePositions = data.filter(point =>
+        point.tick > 0 &&
+        point.position > 0
+      );
+
+      if (positivePositions.length > 0) {
+        const positionPath = positivePositions
+          .map((point, pointIndex) => {
+            const command = pointIndex === 0 ? "M" : "L";
+
+            return (
+              `${command} ${positionX(point.tick)} ` +
+              `${positionY(point.position)}`
+            );
+          })
+          .join(" ");
+
+        positionGroup.appendChild(
+          createSvgElement("path", {
+            d: positionPath,
+            fill: "none",
+            stroke: config.color,
+            "stroke-width": 2
+          })
+        );
+
+        positivePositions.forEach(point => {
+          positionGroup.appendChild(
+            createSvgElement("circle", {
+              cx: positionX(point.tick),
+              cy: positionY(point.position),
+              r: 2,
+              fill: config.color
+            })
+          );
+        });
+      }
+
+      group.appendChild(positionGroup);
 
       return {
         name: config.name,
@@ -401,7 +694,13 @@
   svg.appendChild(anchors);
 
   // ==================================================
-  // GENERATE EVERY VISIBILITY STATE
+  // GENERATE VISIBILITY STATES
+  //
+  // Each state has:
+  //   - the selected configuration groups
+  //   - one legend
+  //
+  // The legend uses colored bullet text only.
   // ==================================================
 
   for (let mask = 0; mask < stateCount; mask++) {
@@ -410,7 +709,7 @@
       "data-state": stateId(mask)
     });
 
-    // Add visible configuration groups.
+    // Add visible configurations.
     configurationGroups.forEach((config, index) => {
       const visible = (mask & (1 << index)) !== 0;
 
@@ -419,50 +718,28 @@
       }
     });
 
-    // --------------------------------------------------
-    // LEGEND
-    // Each linked legend entry uses its configuration's
-    // exact color, whether visible or hidden.
-    // --------------------------------------------------
-
+    // One legend shared by both plots.
     const legendGroup = createSvgElement("g", {
       class: "legend"
     });
 
-    const legendStartX = GLOBAL.width - 10;
-    const legendStartY = 20;
+    const legendStartX = GLOBAL.panelWidth - 10;
+    const legendStartY = 25;
     const legendSpacing = 18;
 
     CONFIGURATIONS.forEach((config, index) => {
       const visible = (mask & (1 << index)) !== 0;
-
-      // Clicking toggles only this configuration.
       const nextMask = mask ^ (1 << index);
 
       const link = createSvgElement("a", {
         href: `#${stateId(nextMask)}`,
-        "data-toggle-config": index + 1
+        "data-toggle-config": index + 1,
+        style: "cursor:pointer"
       });
 
-      const yPosition = legendStartY + index * legendSpacing;
-
-      // Color indicator.
-      const indicator = createSvgElement("line", {
-        x1: legendStartX - 160,
-        y1: yPosition - 4,
-        x2: legendStartX - 145,
-        y2: yPosition - 4,
-        stroke: config.color,
-        "stroke-width": 3,
-        opacity: visible ? 1 : 0.25
-      });
-
-      legendGroup.appendChild(indicator);
-
-      // Linked legend text.
       const text = createSvgElement("text", {
         x: legendStartX,
-        y: yPosition,
+        y: legendStartY + index * legendSpacing,
         fill: config.color,
         opacity: visible ? 1 : 0.35,
         "font-size": 12,
@@ -474,11 +751,6 @@
         `${visible ? "●" : "○"} ${config.name}`;
 
       link.appendChild(text);
-
-      // Make the color indicator part of the clickable link too.
-      // Both the text and indicator retain config.color.
-      link.insertBefore(indicator, text);
-
       legendGroup.appendChild(link);
     });
 
@@ -488,22 +760,38 @@
 
   // ==================================================
   // MEDIAWIKI TABLE
-  // Always contains every configuration.
+  //
+  // Each configuration has two columns:
+  //   - Velocity in blocks/second
+  //   - Position in blocks
+  //
+  // Headers use the same color as the graph curves.
+  // All configurations are always included.
   // ==================================================
 
   const wikiLines = [
     '{| class="wikitable"',
-    "! Tick",
-    ...CONFIGURATIONS.map(config => `! ${config.name}`)
+    "! Tick"
   ];
+
+  CONFIGURATIONS.forEach(config => {
+    wikiLines.push(
+      `! style="color:${config.color}" | ${config.name} - Velocity`,
+      `! style="color:${config.color}" | ${config.name} - Position`
+    );
+  });
 
   for (let tick = 0; tick <= GLOBAL.maxTicks; tick++) {
     wikiLines.push("|-");
 
-    wikiLines.push(
-      `| ${tick}`,
-      ...allData.map(data => `| ${data[tick].speed.toFixed(3)}`)
-    );
+    wikiLines.push(`| ${tick}`);
+
+    allData.forEach(data => {
+      wikiLines.push(
+        `| ${data[tick].speed.toFixed(3)}`,
+        `| ${data[tick].position.toFixed(3)}`
+      );
+    });
   }
 
   wikiLines.push("|}");
@@ -517,6 +805,8 @@
   container.id = "velocity-graph-output";
   container.style.fontFamily = "sans-serif";
   container.style.margin = "12px 0";
+  container.style.maxWidth = "100%";
+  container.style.overflowX = "auto";
 
   const tableLabel = document.createElement("div");
   tableLabel.textContent = "MediaWiki table";
