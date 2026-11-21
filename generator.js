@@ -12,7 +12,7 @@
     panelGap: 100,
 
     maxTicks: 250,
-    maxSpeed: 150,
+    maxSpeed: 200,
     maxPosition: 1500,
     minPosition: 0.01,
 
