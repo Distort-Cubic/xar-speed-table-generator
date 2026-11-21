@@ -358,9 +358,10 @@
   // Position y-axis grid lines.
   // Logarithmic values at powers of ten.
 
-  const positionGridValues = [
-    0.01, 0.1, 1, 10, 100, 1000
-  ];
+const positionGridValues = [
+  1, 8, 16, 32, 48, 64,
+  128, 256, 512, 768, 1024, 1500
+];
 
   positionGridValues.forEach(value => {
     if (
