@@ -86,12 +86,39 @@
       ]
     },
     {
-      name: "Rocket - Rail Vampire Forwards (Fast)",
-      color: "#1e1ee5",
+      name: "Rocket - Nuke Primary Backwards",
+      color: "#444444",
       drag: 0.98,
       acceleration: 0.2,
       impulses: [
-        { magnitude: 0.15, interval: 7 }
+        { magnitude: 1.5, interval: 25 }
+      ]
+    },
+    {
+      name: "Rocket - Nuclear Propulsion",
+      color: "#445566",
+      drag: 0.98,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 2, interval: 25 }
+      ]
+    },
+    {
+      name: "Dark Hole Drive - Nulcear Propulsion",
+      color: "#442266",
+      drag: 0.99,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 2, interval: 25 }
+      ]
+    },
+    {
+      name: "Quasar - Nuclear Propulsion",
+      color: "#331166",
+      drag: 0.995,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 2, interval: 25 }
       ]
     }
   ];
