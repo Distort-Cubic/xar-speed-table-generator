@@ -44,14 +44,14 @@
   const CONFIGURATIONS = [
     {
       name: "Rocket - No Impulses",
-      color: "#e53935",
+      color: "#888888",
       drag: 0.98,
       acceleration: 0.2,
       impulses: []
     },
     {
-      name: "Rocket - Projectile",
-      color: "#1e88e5",
+      name: "Rocket - Secondary Rockets (Slow)",
+      color: "#aaaa33",
       drag: 0.98,
       acceleration: 0.2,
       impulses: [
@@ -59,13 +59,39 @@
       ]
     },
     {
-      name: "Rocket - Multiple Sources",
-      color: "#43a047",
+      name: "Rocket - Secondary Rockets (Fast)",
+      color: "#aaaa33",
       drag: 0.98,
       acceleration: 0.2,
       impulses: [
-        { magnitude: 0.05, interval: 25 },
-        { magnitude: 0.10, interval: 50, offset: 10 }
+        { magnitude: 0.05, interval: 5 }
+      ]
+    },
+    {
+      name: "Rocket - Rail Primary Backwards (Slow)",
+      color: "#1e1ee5",
+      drag: 0.98,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 0.2, interval: 50 }
+      ]
+    },
+    {
+      name: "Rocket - Rail Primary Backwards (Fast)",
+      color: "#1e1ee5",
+      drag: 0.98,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 0.2, interval: 7 }
+      ]
+    },
+    {
+      name: "Rocket - Rail Vampire Forwards (Fast)",
+      color: "#1e1ee5",
+      drag: 0.98,
+      acceleration: 0.2,
+      impulses: [
+        { magnitude: 0.15, interval: 7 }
       ]
     }
   ];
