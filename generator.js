@@ -639,16 +639,16 @@ const positionGridValues = [
         class: "velocity-series"
       });
 
-      const velocityPath = data
-        .map((point, pointIndex) => {
-          const command = pointIndex === 0 ? "M" : "L";
+const velocityPath = data
+  .map((point, pointIndex) => {
+    const command = pointIndex === 0 ? "M" : "L";
 
-          return (
-            `${command} ${velocityX(point.tick)} ` +
-            `${velocityY(point.speed)}`
-          );
-        })
-        .join(" ");
+    return (
+      `${command} ${velocityX(point.tick).toFixed(1)} ` +
+      `${velocityY(point.speed).toFixed(1)}`
+    );
+  })
+  .join(" ");
 
       velocityGroup.appendChild(
         createSvgElement("path", {
@@ -688,17 +688,17 @@ const positionGridValues = [
         point.position > 0
       );
 
-      if (positivePositions.length > 0) {
-        const positionPath = positivePositions
-          .map((point, pointIndex) => {
-            const command = pointIndex === 0 ? "M" : "L";
+if (positivePositions.length > 0) {
+  const positionPath = positivePositions
+    .map((point, pointIndex) => {
+      const command = pointIndex === 0 ? "M" : "L";
 
-            return (
-              `${command} ${positionX(point.tick)} ` +
-              `${positionY(point.position)}`
-            );
-          })
-          .join(" ");
+      return (
+        `${command} ${positionX(point.tick).toFixed(1)} ` +
+        `${positionY(point.position).toFixed(1)}`
+      );
+    })
+    .join(" ");
 
         positionGroup.appendChild(
           createSvgElement("path", {
