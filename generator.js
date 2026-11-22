@@ -659,17 +659,6 @@ const velocityPath = data
         })
       );
 
-      data.forEach(point => {
-        velocityGroup.appendChild(
-          createSvgElement("circle", {
-            cx: velocityX(point.tick),
-            cy: velocityY(point.speed),
-            r: 2,
-            fill: config.color
-          })
-        );
-      });
-
       group.appendChild(velocityGroup);
 
       // ----------------------------------------------
@@ -708,17 +697,6 @@ if (positivePositions.length > 0) {
             "stroke-width": 2
           })
         );
-
-        positivePositions.forEach(point => {
-          positionGroup.appendChild(
-            createSvgElement("circle", {
-              cx: positionX(point.tick),
-              cy: positionY(point.position),
-              r: 2,
-              fill: config.color
-            })
-          );
-        });
       }
 
       group.appendChild(positionGroup);
