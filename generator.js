@@ -678,8 +678,9 @@ const velocityPath = data
       );
 
 if (positivePositions.length > 0) {
-  const positionPath = positivePositions
-    .map((point, pointIndex) => {
+const positionPath = positivePositions
+  .filter((point, pointIndex) => pointIndex % 2 === 0)
+  .map((point, pointIndex) => {
       const command = pointIndex === 0 ? "M" : "L";
 
       return (
