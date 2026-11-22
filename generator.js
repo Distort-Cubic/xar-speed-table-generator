@@ -814,7 +814,7 @@ const positionPath = positivePositions
     );
   });
 
-  for (let tick = 0; tick <= GLOBAL.maxTicks; tick++) {
+  for (let tick = 25; tick <= GLOBAL.maxTicks; tick += 25) {
     wikiLines.push("|-");
 
     wikiLines.push(`| ${tick}`);
